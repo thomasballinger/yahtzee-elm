@@ -3,37 +3,48 @@ module Main exposing (..)
 import Html exposing (..)
 import Html.Events exposing (onClick)
 import Html.App
+
+
 -- import List
+
 import Dice
 import Debug
 
 
 -- MODEL
-
-
 -- List.repeat 6 diceModel
 
+
 type alias BoardModel =
-  { diceModel : Dice.Model
-  }
+    { diceModel : List Dice.Model
+    }
+
 
 initialModel : BoardModel
 initialModel =
-  { diceModel = Dice.initialModel
-  }
+    { diceModel =
+        [ Dice.initialModel
+        , Dice.initialModel
+        , Dice.initialModel
+        , Dice.initialModel
+        , Dice.initialModel
+        ]
+    }
 
 
 init : ( BoardModel, Cmd Msg )
 init =
-  ( initialModel, Cmd.none )
+    ( initialModel, Cmd.none )
+
 
 
 -- MESSAGES
 
 
 type Msg
-  = DiceMsg Dice.Msg
-  | RollDice
+    = DiceMsg Int Dice.Msg
+    | RollDice
+
 
 
 -- VIEW
@@ -41,10 +52,13 @@ type Msg
 
 view : BoardModel -> Html Msg
 view model =
-  div []
-    [ Html.App.map DiceMsg (Dice.view model.diceModel)
-    , button [ onClick RollDice ] [ text "Roll Dice" ]
-    ]
+    div []
+        ((model.diceModel
+            |> List.indexedMap (\i dieModel -> Html.App.map (DiceMsg i) (Dice.view dieModel))
+         )
+            ++ [ button [ onClick RollDice ] [ text "Roll Dice" ] ]
+        )
+
 
 
 -- UPDATE
@@ -52,28 +66,57 @@ view model =
 
 update : Msg -> BoardModel -> ( BoardModel, Cmd Msg )
 update msg model =
-  case msg of
-    DiceMsg subMsg ->
-      let
-          ( updatedDiceModel, diceCmd ) =
-            Dice.update (Debug.log "submsg-DiceMsg" subMsg) model.diceModel
-      in
-          ( { model | diceModel = updatedDiceModel }
-          , (Debug.log "none-DiceMsg" Cmd.none) )
-    RollDice ->
-      let
-          ( updatedDiceModel, diceCmd ) =
-            Dice.update Dice.Roll model.diceModel
-      in
-          ( { model | diceModel = updatedDiceModel }
-          , Cmd.map (Debug.log "dicemsg-RollDice" DiceMsg) (Debug.log "dicecmd-RollDice" diceCmd) )
+    case msg of
+        DiceMsg whichDie subMsg ->
+            let
+                ( updatedDiceModel, diceCmds ) =
+                    List.unzip
+                        (List.indexedMap
+                            (\i dieModel ->
+                                if i == whichDie then
+                                    let
+                                        ( newDie, cmd ) =
+                                            Dice.update subMsg dieModel
+                                    in
+                                        ( newDie, ( i, cmd ) )
+                                else
+                                    ( dieModel, ( i, Cmd.none ) )
+                            )
+                            model.diceModel
+                        )
+            in
+                ( { model | diceModel = updatedDiceModel }
+                , Cmd.batch (List.map (\( i, cmd ) -> Cmd.map (DiceMsg i) cmd) diceCmds)
+                )
+
+        RollDice ->
+            let
+                ( updatedDiceModel, diceCmds ) =
+                    List.unzip
+                        (List.indexedMap
+                            (\i dieModel ->
+                                let
+                                    ( newDie, cmd ) =
+                                        Dice.update Dice.Roll dieModel
+                                in
+                                    ( newDie, ( i, cmd ) )
+                            )
+                            model.diceModel
+                        )
+            in
+                ( { model | diceModel = updatedDiceModel }
+                , Cmd.batch (List.map (\( i, cmd ) -> Cmd.map (DiceMsg i) cmd) diceCmds)
+                )
+
+
 
 -- SUBSCRIPTIONS
 
 
 subscriptions : BoardModel -> Sub Msg
 subscriptions model =
-  Sub.none
+    Sub.none
+
 
 
 -- MAIN
@@ -81,9 +124,9 @@ subscriptions model =
 
 main : Program Never
 main =
-  Html.App.program
-    { init = init
-    , view = view
-    , update = update
-    , subscriptions = subscriptions
-    }
+    Html.App.program
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        }
